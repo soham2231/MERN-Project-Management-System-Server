@@ -2,8 +2,9 @@ const express = require("express");
 const dotenv = require("dotenv");
 const cors = require("cors");
 const connectDB = require("./config/db");
-const userRoutes = require('./routes/userRoutes')
+const userRoutes = require("./routes/userRoutes");
 const projectRoutes = require("./routes/projectRoutes");
+const taskRoutes = require("./routes/taskRoutes");
 
 // Load environment variables
 dotenv.config();
@@ -17,7 +18,7 @@ app.use(cors());
 app.use(express.json());
 
 //=========for tasks
-// app.use("/tasks", taskRoutes);
+app.use("/tasks", taskRoutes);
 
 //==========for user
 app.use("/users", userRoutes);
