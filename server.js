@@ -3,6 +3,7 @@ const dotenv = require("dotenv");
 const cors = require("cors");
 const connectDB = require("./config/db");
 const userRoutes = require('./routes/userRoutes')
+const projectRoutes = require("./routes/projectRoutes");
 
 // Load environment variables
 dotenv.config();
@@ -15,13 +16,19 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// //=========for tasks
+//=========for tasks
 // app.use("/tasks", taskRoutes);
-// //==========for user
+
+//==========for user
 app.use("/users", userRoutes);
-// //===========for assign tasks or assigned tasks
+
+//=========for projects
+app.use("/projects", projectRoutes);
+
+//===========for assign tasks or assigned tasks
 // app.use("/assignTask",assignTaskRouter);
-// //multer for mg up dwnld
+
+//multer for mg up dwnld-
 // app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Test Route
