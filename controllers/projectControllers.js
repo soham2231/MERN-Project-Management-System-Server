@@ -1,4 +1,5 @@
 const Project = require("../models/projectModel");
+const mongoose = require("mongoose");
 
 const createProject = async (req, res) => {
   try {
@@ -27,10 +28,23 @@ const createProject = async (req, res) => {
       });
     }
 
-    const project = await Project.create({
-      projectName,
+    const existingProject = await Project.findOne({
+      createdBy: req.user.id,
+      projectName: {
+        $regex: new RegExp(`^${projectName.trim()}$`, "i"),
+      },
+    });
 
-      description,
+    if (existingProject) {
+      return res.status(409).json({
+        success: false,
+        message: "Project with this name already exists.",
+      });
+    }
+
+    const project = await Project.create({
+      projectName: projectName.trim(),
+      description: description.trim(),
 
       startDate,
 
@@ -103,29 +117,29 @@ const updateProject = async (req, res) => {
         message: "Unauthorized",
       });
     }
+    const { projectName, description, status, startDate, endDate } = req.body;
 
-    const {
-      projectName,
+    const updatedStartDate = startDate || project.startDate;
+    const updatedEndDate = endDate || project.endDate;
 
-      description,
+    if (projectName) {
+      const existingProject = await Project.findOne({
+        createdBy: req.user.id,
+        projectName: {
+          $regex: new RegExp(`^${projectName.trim()}$`, "i"),
+        },
+        _id: { $ne: project._id },
+      });
 
-      status,
+      if (existingProject) {
+        return res.status(409).json({
+          success: false,
+          message: "Project with this name already exists.",
+        });
+      }
+    }
 
-      startDate,
-
-      endDate,
-    } = req.body;
-
-    project.projectName = projectName || project.projectName;
-
-    project.description = description || project.description;
-
-    project.status = status || project.status;
-
-    project.startDate = startDate || project.startDate;
-
-    project.endDate = endDate || project.endDate;
-
+    // Date Validation
     if (new Date(updatedEndDate) < new Date(updatedStartDate)) {
       return res.status(400).json({
         success: false,
@@ -133,8 +147,13 @@ const updateProject = async (req, res) => {
       });
     }
 
-    await project.save();
+    project.projectName = projectName || project.projectName;
+    project.description = description || project.description;
+    project.status = status || project.status;
+    project.startDate = updatedStartDate;
+    project.endDate = updatedEndDate;
 
+    await project.save();
     res.status(200).json({
       success: true,
 
@@ -188,9 +207,247 @@ const deleteProject = async (req, res) => {
   }
 };
 
+const getProjectByID = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Validate ObjectId
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Project ID.",
+      });
+    }
+
+    const project = await Project.findById(id).populate(
+      "createdBy",
+      "fullName email role",
+    );
+
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found.",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: project,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const updateStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { status } = req.body;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Project ID.",
+      });
+    }
+
+    const validStatus = ["Pending", "In Progress", "Completed"];
+
+    if (!validStatus.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid status. Allowed values are Pending, In Progress and Completed.",
+      });
+    }
+
+    const project = await Project.findById(id);
+
+    if (!project) {
+      return res.status(404).json({
+        success: false,
+        message: "Project not found.",
+      });
+    }
+
+    project.status = status;
+
+    await project.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Project status updated successfully.",
+      data: project,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+//=====================================DASHBOARD APIS===================================================
+
+const getTotalProjects = async (req, res) => {
+  try {
+    const totalProjects = await Project.countDocuments();
+
+    res.status(200).json({
+      success: true,
+      totalProjects,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const getCompletedProjects = async (req, res) => {
+  try {
+    const totalCompletedProjects = await Project.countDocuments({
+      status: "Completed",
+    });
+
+    res.status(200).json({
+      success: true,
+      totalCompletedProjects,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const getPendingProjects = async (req, res) => {
+  try {
+    const totalPendingProjects = await Project.countDocuments({
+      status: "Pending",
+    });
+
+    res.status(200).json({
+      success: true,
+      totalPendingProjects,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const getInProgressProjects = async (req, res) => {
+  try {
+    const totalInProgressProjects = await Project.countDocuments({
+      status: "In Progress",
+    });
+
+    res.status(200).json({
+      success: true,
+      totalInProgressProjects,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const getProjectsByStatus = async (req, res) => {
+  try {
+    const { status } = req.query;
+
+    const validStatus = ["Pending", "In Progress", "Completed"];
+
+    if (!status) {
+      return res.status(400).json({
+        success: false,
+        message: "Status is required.",
+      });
+    }
+
+    if (!validStatus.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid status.",
+      });
+    }
+
+    const projects = await Project.find({ status }).populate(
+      "createdBy",
+      "fullName email",
+    );
+
+    res.status(200).json({
+      success: true,
+      count: projects.length,
+      data: projects,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const getProjectsBySelectedMonth = async (req, res) => {
+  try {
+    const { month, year } = req.query;
+
+    if (!month || !year) {
+      return res.status(400).json({
+        success: false,
+        message: "Month and Year are required.",
+      });
+    }
+
+    const startDate = new Date(year, month - 1, 1);
+
+    const endDate = new Date(year, month, 1);
+
+    const projects = await Project.find({
+      startDate: {
+        $gte: startDate,
+        $lt: endDate,
+      },
+    }).populate("createdBy", "fullName email");
+
+    res.status(200).json({
+      success: true,
+      count: projects.length,
+      data: projects,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   createProject,
   getAllProjects,
   updateProject,
   deleteProject,
+  getProjectByID,
+  updateStatus,
+  getTotalProjects,
+  getCompletedProjects,
+  getPendingProjects,
+  getInProgressProjects,
+  getProjectsByStatus,
+  getProjectsBySelectedMonth,
 };
