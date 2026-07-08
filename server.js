@@ -5,6 +5,7 @@ const connectDB = require("./config/db");
 const userRoutes = require("./routes/userRoutes");
 const projectRoutes = require("./routes/projectRoutes");
 const taskRoutes = require("./routes/taskRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
 
 // Load environment variables
 dotenv.config();
@@ -25,6 +26,9 @@ app.use("/users", userRoutes);
 
 //=========for projects
 app.use("/projects", projectRoutes);
+
+//==========for dashboard
+app.use("/dashboard", dashboardRoutes);
 
 //===========for assign tasks or assigned tasks
 // app.use("/assignTask",assignTaskRouter);
