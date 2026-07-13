@@ -1,5 +1,6 @@
 const Project = require("../models/projectModel");
 const Task = require("../models/taskModel");
+const TaskAssignment = require("../models/assignTaskUser");
 
 const getDashboard = async (req, res) => {
   try {
@@ -15,8 +16,10 @@ const getDashboard = async (req, res) => {
       taskFilter = { createdBy: id };
     }
 
+    let assignmentFilter = {};
+
     if (role === "Member") {
-      taskFilter = { assignedTo: id };
+      assignmentFilter = { assignedTo: id };
     }
 
     // ================= COUNTS =================
@@ -79,9 +82,13 @@ const getDashboard = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(5)
       .populate("project", "projectName")
-      .populate("assignedTo", "fullName email")
       .populate("createdBy", "fullName email");
 
+    const recentAssignments = await TaskAssignment.find(assignmentFilter)
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .populate("task", "title priority status")
+      .populate("assignedBy", "fullName email");
     // ================= RESPONSE =================
 
     res.status(200).json({
@@ -106,8 +113,8 @@ const getDashboard = async (req, res) => {
         },
 
         recentProjects,
-
         recentTasks,
+        recentAssignments,
       },
     });
   } catch (error) {

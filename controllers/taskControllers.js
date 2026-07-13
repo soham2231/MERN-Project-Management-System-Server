@@ -2,18 +2,11 @@ const mongoose = require("mongoose");
 const Task = require("../models/taskModel");
 const Project = require("../models/projectModel");
 const User = require("../models/userModel");
+const TaskAssignment = require("../models/assignTaskUser");
 
 const createTask = async (req, res) => {
   try {
-    const {
-      title,
-      description,
-      status,
-      priority,
-      dueDate,
-      project,
-      assignedTo,
-    } = req.body;
+    const { title, description, dueDate, project } = req.body;
 
     // Required Fields
     if (!title || !description || !project || !dueDate) {
@@ -102,32 +95,6 @@ const createTask = async (req, res) => {
       });
     }
 
-    // Assigned User Validation
-    if (assignedTo) {
-      if (!mongoose.Types.ObjectId.isValid(assignedTo)) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid User ID.",
-        });
-      }
-
-      const existingUser = await User.findById(assignedTo);
-
-      if (!existingUser) {
-        return res.status(404).json({
-          success: false,
-          message: "Assigned user not found.",
-        });
-      }
-
-      if (existingUser.role !== "Member") {
-        return res.status(400).json({
-          success: false,
-          message: "Tasks can only be assigned to Members.",
-        });
-      }
-    }
-
     const task = await Task.create({
       title: title.trim(),
       description: description.trim(),
@@ -135,7 +102,6 @@ const createTask = async (req, res) => {
       priority,
       dueDate,
       project,
-      assignedTo,
       createdBy: req.user.id,
     });
 
@@ -156,7 +122,6 @@ const getAllTasks = async (req, res) => {
   try {
     const tasks = await Task.find()
       .populate("project", "projectName")
-      .populate("assignedTo", "fullName email")
       .populate("createdBy", "fullName email")
       .sort({ createdAt: -1 });
 
@@ -177,6 +142,12 @@ const updateTask = async (req, res) => {
   try {
     const { id } = req.params;
 
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Task ID.",
+      });
+    }
     const task = await Task.findById(id);
 
     if (!task) {
@@ -186,26 +157,13 @@ const updateTask = async (req, res) => {
       });
     }
 
-    const { title, description, status, priority, dueDate, assignedTo } =
-      req.body;
-
-    if (assignedTo) {
-      const user = await User.findById(assignedTo);
-
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message: "Assigned user not found.",
-        });
-      }
-    }
+    const { title, description, status, priority, dueDate } = req.body;
 
     task.title = title || task.title;
     task.description = description || task.description;
     task.status = status || task.status;
     task.priority = priority || task.priority;
     task.dueDate = dueDate || task.dueDate;
-    task.assignedTo = assignedTo || task.assignedTo;
 
     await task.save();
 
@@ -226,6 +184,13 @@ const deleteTask = async (req, res) => {
   try {
     const { id } = req.params;
 
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid Task ID.",
+      });
+    }
+
     const task = await Task.findById(id);
 
     if (!task) {
@@ -234,7 +199,9 @@ const deleteTask = async (req, res) => {
         message: "Task not found.",
       });
     }
-
+    await TaskAssignment.deleteMany({
+      task: task._id,
+    });
     await task.deleteOne();
 
     res.status(200).json({
@@ -262,7 +229,6 @@ const getTaskById = async (req, res) => {
 
     const task = await Task.findById(id)
       .populate("project", "projectName")
-      .populate("assignedTo", "fullName email")
       .populate("createdBy", "fullName email");
 
     if (!task) {
@@ -314,6 +280,13 @@ const updateTaskStatus = async (req, res) => {
       });
     }
 
+    if (task.status === status) {
+      return res.status(400).json({
+        success: false,
+        message: `Task is already ${status}.`,
+      });
+    }
+
     task.status = status;
 
     await task.save();
@@ -321,74 +294,6 @@ const updateTaskStatus = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Task status updated successfully.",
-      data: task,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-const assignTask = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { assignedTo } = req.body;
-
-    // Validate Task ID
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid Task ID.",
-      });
-    }
-
-    // Validate User ID
-    if (!assignedTo || !mongoose.Types.ObjectId.isValid(assignedTo)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid User ID.",
-      });
-    }
-
-    // Check Task Exists
-    const task = await Task.findById(id);
-
-    if (!task) {
-      return res.status(404).json({
-        success: false,
-        message: "Task not found.",
-      });
-    }
-
-    // Check User Exists
-    const user = await User.findById(assignedTo);
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found.",
-      });
-    }
-
-    // Only Members can be assigned
-    if (user.role !== "Member") {
-      return res.status(400).json({
-        success: false,
-        message: "Task can only be assigned to Members.",
-      });
-    }
-
-    task.assignedTo = assignedTo;
-
-    await task.save();
-
-    await task.populate("assignedTo", "fullName email role");
-
-    res.status(200).json({
-      success: true,
-      message: "Task assigned successfully.",
       data: task,
     });
   } catch (error) {
@@ -412,9 +317,7 @@ const getTasksByProject = async (req, res) => {
 
     const tasks = await Task.find({
       project: projectId,
-    })
-      .populate("assignedTo", "fullName email")
-      .sort({ createdAt: -1 });
+    }).sort({ createdAt: -1 });
 
     res.status(200).json({
       success: true,
@@ -512,7 +415,9 @@ const getTasksByStatus = async (req, res) => {
       });
     }
 
-    const tasks = await Task.find({ status });
+    const tasks = await Task.find({ status })
+      .populate("project", "projectName")
+      .populate("createdBy", "fullName email");
 
     res.status(200).json({
       success: true,

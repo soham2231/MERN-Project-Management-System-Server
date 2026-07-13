@@ -1,5 +1,7 @@
 const Project = require("../models/projectModel");
 const mongoose = require("mongoose");
+const Task = require("../models/taskModel");
+const TaskAssignment = require("../models/assignTaskUser");
 
 const createProject = async (req, res) => {
   try {
@@ -73,9 +75,13 @@ const createProject = async (req, res) => {
 
 const getAllProjects = async (req, res) => {
   try {
-    const projects = await Project.find({
-      createdBy: req.user.id,
-    })
+    let filter = {};
+
+    if (req.user.role === "HOD") {
+      filter.createdBy = req.user.id;
+    }
+
+    const projects = await Project.find(filter)
       .populate("createdBy", "fullName email")
       .sort({ createdAt: -1 });
 
@@ -139,6 +145,16 @@ const updateProject = async (req, res) => {
       }
     }
 
+    const validStatus = ["Pending", "In Progress", "Completed"];
+
+    if (status && !validStatus.includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid status. Allowed values are: Pending, In Progress, Completed.",
+      });
+    }
+
     // Date Validation
     if (new Date(updatedEndDate) < new Date(updatedStartDate)) {
       return res.status(400).json({
@@ -192,8 +208,23 @@ const deleteProject = async (req, res) => {
       });
     }
 
-    await project.deleteOne();
+    const tasks = await Task.find({
+      project: project._id,
+    });
 
+    const taskIds = tasks.map((task) => task._id);
+
+    await TaskAssignment.deleteMany({
+      task: {
+        $in: taskIds,
+      },
+    });
+
+    await Task.deleteMany({
+      project: project._id,
+    });
+
+    await project.deleteOne();
     res.status(200).json({
       success: true,
 
@@ -216,6 +247,16 @@ const getProjectByID = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Invalid Project ID.",
+      });
+    }
+
+    if (
+      req.user.role === "HOD" &&
+      project.createdBy.toString() !== req.user.id
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied.",
       });
     }
 
@@ -272,6 +313,13 @@ const updateStatus = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Project not found.",
+      });
+    }
+
+    if (project.status === status) {
+      return res.status(400).json({
+        success: false,
+        message: `Project is already ${status}.`,
       });
     }
 

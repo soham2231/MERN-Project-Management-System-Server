@@ -6,6 +6,7 @@ const userRoutes = require("./routes/userRoutes");
 const projectRoutes = require("./routes/projectRoutes");
 const taskRoutes = require("./routes/taskRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
+const taskAssignmentRoutes = require("./routes/taskAssignRoutes");
 
 // Load environment variables
 dotenv.config();
@@ -31,7 +32,8 @@ app.use("/projects", projectRoutes);
 app.use("/dashboard", dashboardRoutes);
 
 //===========for assign tasks or assigned tasks
-// app.use("/assignTask",assignTaskRouter);
+
+app.use("/taskAssignments", taskAssignmentRoutes);
 
 //multer for mg up dwnld-
 // app.use("/uploads", express.static(path.join(__dirname, "uploads")));
