@@ -6,8 +6,15 @@ const TaskAssignment = require("../models/assignTaskUser");
 
 const createTask = async (req, res) => {
   try {
-    const { title, description, dueDate, project } = req.body;
-
+    const {
+      title,
+      description,
+      status,
+      priority,
+      dueDate,
+      project,
+      assignedTo,
+    } = req.body;
     // Required Fields
     if (!title || !description || !project || !dueDate) {
       return res.status(400).json({
@@ -95,15 +102,26 @@ const createTask = async (req, res) => {
       });
     }
 
+    const attachment = req.file ? req.file.path.replace(/\\/g, "/") : "";
+
     const task = await Task.create({
-      title: title.trim(),
-      description: description.trim(),
+      title,
+      description,
       status,
       priority,
       dueDate,
       project,
       createdBy: req.user.id,
+      attachment,
     });
+
+    if (assignedTo) {
+      await TaskAssignment.create({
+        task: task._id,
+        assignedTo,
+        assignedBy: req.user.id,
+      });
+    }
 
     res.status(201).json({
       success: true,
@@ -120,15 +138,76 @@ const createTask = async (req, res) => {
 
 const getAllTasks = async (req, res) => {
   try {
-    const tasks = await Task.find()
-      .populate("project", "projectName")
-      .populate("createdBy", "fullName email")
-      .sort({ createdAt: -1 });
+    let tasks = [];
+
+    // ================= ADMIN =================
+    if (req.user.role === "Admin") {
+      tasks = await Task.find()
+        .populate("project", "projectName")
+        .populate("createdBy", "fullName email")
+        .sort({ createdAt: -1 });
+    }
+
+    // ================= HOD =================
+    else if (req.user.role === "HOD") {
+      tasks = await Task.find({
+        createdBy: req.user.id,
+      })
+        .populate("project", "projectName")
+        .populate("createdBy", "fullName email")
+        .sort({ createdAt: -1 });
+    }
+
+    // ================= MEMBER =================
+    else {
+      const userAssignments = await TaskAssignment.find({
+        assignedTo: req.user.id,
+      });
+
+      const taskIds = userAssignments.map((item) => item.task);
+
+      tasks = await Task.find({
+        _id: { $in: taskIds },
+      })
+        .populate("project", "projectName")
+        .populate("createdBy", "fullName email")
+        .sort({ createdAt: -1 });
+    }
+
+    // ================= ADD ASSIGNED USER =================
+    const assignments = await TaskAssignment.find().populate(
+      "assignedTo",
+      "fullName email",
+    );
+
+    const assignmentMap = {};
+
+    assignments.forEach((assignment) => {
+      assignmentMap[assignment.task.toString()] = assignment.assignedTo;
+    });
+
+    console.log(
+      "Tasks:============------------================+++++++++++++++",
+    );
+    console.log(tasks);
+
+    console.log("Assignments:");
+    console.log(assignments);
+    console.log(JSON.stringify(assignments, null, 2));
+    const updatedTasks = tasks.map((task) => {
+      const taskObj = task.toObject();
+
+      taskObj.assignedTo = assignmentMap[task._id.toString()] || null;
+
+      return taskObj;
+    });
+
+    console.log(updatedTasks[0]);
 
     res.status(200).json({
       success: true,
-      count: tasks.length,
-      data: tasks,
+      count: updatedTasks.length,
+      data: updatedTasks,
     });
   } catch (error) {
     res.status(500).json({
@@ -156,16 +235,51 @@ const updateTask = async (req, res) => {
         message: "Task not found.",
       });
     }
+    const {
+      title,
+      description,
+      status,
+      priority,
+      dueDate,
+      assignedTo,
+      project,
+    } = req.body;
 
-    const { title, description, status, priority, dueDate } = req.body;
+    const attachment = req.file
+      ? req.file.path.replace(/\\/g, "/")
+      : task.attachment;
 
     task.title = title || task.title;
     task.description = description || task.description;
     task.status = status || task.status;
     task.priority = priority || task.priority;
     task.dueDate = dueDate || task.dueDate;
+    task.project = project || task.project;
+    task.assignedTo = assignedTo || task.assignedTo;
+    task.attachment = attachment;
 
     await task.save();
+
+    // ================= UPDATE TASK ASSIGNMENT =================
+
+    if (assignedTo) {
+      let assignment = await TaskAssignment.findOne({
+        task: task._id,
+      });
+
+      if (assignment) {
+        assignment.assignedTo = assignedTo;
+        assignment.assignedBy = req.user.id;
+
+        await assignment.save();
+      } else {
+        await TaskAssignment.create({
+          task: task._id,
+          assignedTo,
+          assignedBy: req.user.id,
+        });
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -238,9 +352,17 @@ const getTaskById = async (req, res) => {
       });
     }
 
+    const assignment = await TaskAssignment.findOne({
+      task: task._id,
+    }).populate("assignedTo", "fullName email");
+
+    const taskObj = task.toObject();
+
+    taskObj.assignedTo = assignment ? assignment.assignedTo : null;
+
     res.status(200).json({
       success: true,
-      data: task,
+      data: taskObj,
     });
   } catch (error) {
     res.status(500).json({

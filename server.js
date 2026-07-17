@@ -7,9 +7,12 @@ const projectRoutes = require("./routes/projectRoutes");
 const taskRoutes = require("./routes/taskRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const taskAssignmentRoutes = require("./routes/taskAssignRoutes");
+const path = require("path");
 
 // Load environment variables
 dotenv.config();
+console.log(process.env.EMAIL_USER);
+console.log(process.env.EMAIL_PASS);
 connectDB();
 
 // Create Express application
@@ -18,6 +21,7 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 //=========for tasks
 app.use("/tasks", taskRoutes);

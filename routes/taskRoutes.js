@@ -3,6 +3,7 @@ const router = express.Router();
 
 const verifyToken = require("../middleware/auth");
 const authorizeRoles = require("../middleware/role");
+const upload = require("../middleware/uploads");
 
 const {
   createTask,
@@ -21,19 +22,18 @@ const {
 } = require("../controllers/taskControllers");
 
 // Create Task
-router.post("/create", verifyToken, authorizeRoles("Admin", "HOD"), createTask);
-
+router.post("/create", verifyToken, upload.single("attachment"), createTask);
 // Get All Tasks
-router.get("/all", verifyToken, getAllTasks);
+router.get("/getAll", verifyToken, getAllTasks);
 
 // Update Task
 router.patch(
   "/update/:id",
   verifyToken,
   authorizeRoles("Admin", "HOD"),
+  upload.single("attachment"),
   updateTask,
 );
-
 // Delete Task
 router.delete(
   "/delete/:id",
