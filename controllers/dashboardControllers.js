@@ -1,6 +1,7 @@
 const Project = require("../models/projectModel");
 const Task = require("../models/taskModel");
 const TaskAssignment = require("../models/assignTaskUser");
+const User = require("../models/userModel");
 
 const getDashboard = async (req, res) => {
   try {
@@ -15,14 +16,37 @@ const getDashboard = async (req, res) => {
       projectFilter = { createdBy: id };
       taskFilter = { createdBy: id };
     }
-
     let assignmentFilter = {};
 
     if (role === "Member") {
       assignmentFilter = { assignedTo: id };
+
+      const assignedTaskIds = (
+        await TaskAssignment.find({ assignedTo: id }).select("task")
+      ).map((a) => a.task);
+
+      taskFilter = {
+        _id: { $in: assignedTaskIds },
+      };
     }
 
-    // ================= COUNTS =================
+    // ================= USER COUNTS (ADMIN) =================
+
+    let totalUsers = 0;
+    let totalAdmins = 0;
+    let totalHODs = 0;
+    let totalMembers = 0;
+
+    if (role === "Admin" || role === "HOD") {
+      [totalUsers, totalAdmins, totalHODs, totalMembers] = await Promise.all([
+        User.countDocuments(),
+        User.countDocuments({ role: "Admin" }),
+        User.countDocuments({ role: "HOD" }),
+        User.countDocuments({ role: "Member" }),
+      ]);
+    }
+
+    // ================= PROJECT & TASK COUNTS =================
 
     const [
       totalProjects,
@@ -97,6 +121,13 @@ const getDashboard = async (req, res) => {
 
       data: {
         userRole: role,
+
+        users: {
+          totalUsers,
+          totalAdmins,
+          totalHODs,
+          totalMembers,
+        },
 
         projects: {
           totalProjects,
