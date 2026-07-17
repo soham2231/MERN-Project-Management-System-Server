@@ -200,8 +200,12 @@ const deleteProject = async (req, res) => {
       });
     }
 
-    //validate only owner can handle respective project
-    if (project.createdBy.toString() !== req.user.id) {
+    // HOD can delete only their own projects.
+    // Admin can delete any project.
+    if (
+      req.user.role !== "Admin" &&
+      project.createdBy.toString() !== req.user.id
+    ) {
       return res.status(403).json({
         success: false,
         message: "Unauthorized",

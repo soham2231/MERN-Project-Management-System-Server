@@ -37,7 +37,7 @@ app.use("/dashboard", dashboardRoutes);
 
 //===========for assign tasks or assigned tasks
 
-app.use("/taskAssignments", taskAssignmentRoutes);
+app.use("/assignments", taskAssignmentRoutes);
 
 //multer for mg up dwnld-
 // app.use("/uploads", express.static(path.join(__dirname, "uploads")));

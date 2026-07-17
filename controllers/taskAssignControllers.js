@@ -97,11 +97,34 @@ const assignTask = async (req, res) => {
 
 const getAllAssignments = async (req, res) => {
   try {
-    const assignments = await TaskAssignment.find()
-      .populate("task", "title status priority")
+    const { id, role } = req.user;
+
+    let filter = {};
+
+    if (role === "Member") {
+      filter.assignedTo = id;
+    }
+
+    let assignments = await TaskAssignment.find(filter)
+      .populate({
+        path: "task",
+        select: "title description status priority project createdBy",
+        populate: {
+          path: "project",
+          select: "projectName",
+        },
+      })
       .populate("assignedTo", "fullName email")
       .populate("assignedBy", "fullName email")
       .sort({ createdAt: -1 });
+
+    if (role === "HOD") {
+      assignments = assignments.filter(
+        (assignment) =>
+          assignment.task &&
+          assignment.task.createdBy?.toString() === id.toString(),
+      );
+    }
 
     res.status(200).json({
       success: true,
@@ -119,8 +142,9 @@ const getAllAssignments = async (req, res) => {
 const updateAssignmentStatus = async (req, res) => {
   try {
     const { id } = req.params;
-
     const { status } = req.body;
+
+    const { role } = req.user;
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({
@@ -138,7 +162,7 @@ const updateAssignmentStatus = async (req, res) => {
       });
     }
 
-    const assignment = await TaskAssignment.findById(id);
+    const assignment = await TaskAssignment.findById(id).populate("task");
 
     if (!assignment) {
       return res.status(404).json({
@@ -147,13 +171,38 @@ const updateAssignmentStatus = async (req, res) => {
       });
     }
 
+    // Member can update only their own assignment
+
+    if (role === "Member" && assignment.assignedTo.toString() !== req.user.id) {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
     assignment.status = status;
 
     await assignment.save();
 
+    // Sync Task Status
+
+    if (status === "Assigned") {
+      assignment.task.status = "Pending";
+    }
+
+    if (status === "Accepted") {
+      assignment.task.status = "In Progress";
+    }
+
+    if (status === "Completed") {
+      assignment.task.status = "Completed";
+    }
+
+    await assignment.task.save();
+
     res.status(200).json({
       success: true,
-      message: "Assignment status updated successfully.",
+      message: "Assignment updated successfully.",
       data: assignment,
     });
   } catch (error) {
